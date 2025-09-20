@@ -5,9 +5,10 @@ A powerful web application for analyzing price and returns correlations between 
 ## Features
 
 - **Async Data Collection**: Efficiently collects OHLCV data for all USDC pairs using ccxt with configurable concurrency
-- **Dual Correlation Analysis**: 
-  - Price correlation (closes.corr())
-  - Returns correlation (returns.pct_change().corr())
+- **Advanced Correlation Analysis**: 
+  - Price correlation (Pearson, Spearman, Kendall)
+  - Returns correlation (Pearson, Spearman, Kendall)
+  - Volume correlation (Pearson, Spearman, Kendall)
 - **Interactive Dashboard**: Filter by volume threshold, select specific symbols, toggle correlation types
 - **Efficient Caching**: Primary storage in Parquet format for optimal performance
 - **Multiple Export Formats**: CSV and Parquet exports for all datasets
@@ -77,7 +78,7 @@ You can customize the application behavior using environment variables:
 # Data collection parameters
 export DAYS=30                    # Number of days to collect (default: 30)
 export TIMEFRAME='1d'             # Timeframe for OHLCV data (default: 1d)
-export CONCURRENCY=10             # API request concurrency (default: 10)
+export CONCURRENCY=10             # API request concurrency (default: 50 for VPS, 10 for local)
 export SYMBOL_CAP=120             # Maximum symbols to collect (default: 120)
 export VOL_THRESHOLD=0            # Default volume filter (default: 0)
 
@@ -95,9 +96,12 @@ python app.py
 - Multi-select dropdown for choosing specific trading pairs
 - Defaults to top 20 symbols by volume when threshold changes
 
-### Correlation Type Toggle
-- **Price Correlation**: Correlation between closing prices
-- **Returns Correlation**: Correlation between daily returns (recommended for financial analysis)
+### Correlation Type Selection
+- **Price Correlation**: Correlation between closing prices (Pearson, Spearman, Kendall)
+- **Returns Correlation**: Correlation between daily returns (Pearson, Spearman, Kendall) - recommended for financial analysis
+- **Volume Correlation**: Correlation between trading volumes (Pearson, Spearman, Kendall)
+- **Spearman**: Non-parametric correlation, better for crypto data with outliers
+- **Kendall**: Tau correlation coefficient for non-linear relationships
 
 ### Interactive Heatmap
 - Color-coded correlation matrix using Plotly
@@ -161,9 +165,13 @@ The application implements several rate limiting best practices:
 - **Error Handling**: Graceful handling of API timeouts and errors
 
 ### Recommended Settings
-- **CONCURRENCY=10**: Safe for most use cases
-- **CONCURRENCY=20**: For faster collection (monitor for rate limit errors)
-- **CONCURRENCY=5**: Conservative setting for shared IP addresses
+- **Local Development**:
+  - **CONCURRENCY=10**: Safe for most use cases
+  - **CONCURRENCY=20**: For faster collection (monitor for rate limit errors)
+  - **CONCURRENCY=5**: Conservative setting for shared IP addresses
+- **VPS/Production**:
+  - **CONCURRENCY=50**: Default optimized setting for VPS
+  - **CONCURRENCY=100**: High-performance VPS with good bandwidth
 
 ## Troubleshooting
 
@@ -226,7 +234,10 @@ For issues and questions:
 ## Roadmap
 
 - [ ] Real-time data streaming
-- [ ] Additional correlation metrics (Spearman, Kendall)
+- [x] Additional correlation metrics (Spearman, Kendall) ✅
+- [x] Volume correlation analysis ✅
 - [ ] Portfolio optimization features
 - [ ] Alert system for correlation changes
 - [ ] Database integration for historical analysis
+- [ ] Multi-timeframe analysis
+- [ ] Statistical significance testing
