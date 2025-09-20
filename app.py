@@ -20,13 +20,17 @@ class BinanceCorrelationApp:
     def __init__(self):
         self.closes = None
         self.returns = None
+        self.volumes = None
         self.meta_df = None
         self.corr_close = None
         self.corr_returns = None
+        self.corr_volumes = None
         self.corr_close_spearman = None
         self.corr_returns_spearman = None
+        self.corr_volumes_spearman = None
         self.corr_close_kendall = None
         self.corr_returns_kendall = None
+        self.corr_volumes_kendall = None
         
     async def fetch_symbols(self):
         """Fetch all USDC trading pairs from Binance"""
@@ -113,11 +117,13 @@ class BinanceCorrelationApp:
                 raise ValueError("No valid data collected")
             
             closes_data = {}
+            volumes_data = {}
             meta_data = []
             
             for result in valid_results:
                 symbol = result['symbol']
                 closes_data[symbol] = result['closes']
+                volumes_data[symbol] = result['volumes']
                 meta_data.append({
                     'symbol': symbol,
                     'mean_volume_30d': result['mean_volume'],
@@ -128,6 +134,10 @@ class BinanceCorrelationApp:
             self.closes.index = pd.to_datetime(self.closes.index)
             self.closes = self.closes.sort_index()
             
+            self.volumes = pd.DataFrame(volumes_data)
+            self.volumes.index = pd.to_datetime(self.volumes.index)
+            self.volumes = self.volumes.sort_index()
+            
             self.meta_df = pd.DataFrame(meta_data).set_index('symbol')
             
             self.returns = self.closes.pct_change().dropna()
@@ -136,14 +146,18 @@ class BinanceCorrelationApp:
             self.corr_close = self.closes.corr()
             print("Calculating returns correlations...")
             self.corr_returns = self.returns.corr()
+            print("Calculating volume correlations...")
+            self.corr_volumes = self.volumes.corr()
             
             print("Calculating Spearman correlations...")
             self.corr_close_spearman = self.calculate_spearman_correlation(self.closes)
             self.corr_returns_spearman = self.calculate_spearman_correlation(self.returns)
+            self.corr_volumes_spearman = self.calculate_spearman_correlation(self.volumes)
             
             print("Calculating Kendall correlations...")
             self.corr_close_kendall = self.calculate_kendall_correlation(self.closes)
             self.corr_returns_kendall = self.calculate_kendall_correlation(self.returns)
+            self.corr_volumes_kendall = self.calculate_kendall_correlation(self.volumes)
             
             print("All correlation calculations completed")
             
@@ -188,16 +202,8 @@ class BinanceCorrelationApp:
             self.corr_close.reset_index().to_parquet('data/corr_close_30d.parquet', index=False)
         if self.corr_returns is not None:
             self.corr_returns.reset_index().to_parquet('data/corr_returns_30d.parquet', index=False)
-        if self.corr_close_spearman is not None:
-            self.corr_close_spearman.reset_index().to_parquet('data/corr_close_spearman_30d.parquet', index=False)
-        if self.corr_returns_spearman is not None:
-            self.corr_returns_spearman.reset_index().to_parquet('data/corr_returns_spearman_30d.parquet', index=False)
-        if self.corr_close_kendall is not None:
-            self.corr_close_kendall.reset_index().to_parquet('data/corr_close_kendall_30d.parquet', index=False)
-        if self.corr_returns_kendall is not None:
-            self.corr_returns_kendall.reset_index().to_parquet('data/corr_returns_kendall_30d.parquet', index=False)
         
-        print("Data and all correlation types cached to Parquet files")
+        print("Data and correlations cached to Parquet files")
     
     def load_cache(self):
         """Load data from Parquet cache files"""
@@ -219,40 +225,12 @@ class BinanceCorrelationApp:
                 corr_returns_df = pd.read_parquet('data/corr_returns_30d.parquet')
                 self.corr_returns = corr_returns_df.set_index('index')
                 
-                # Load Spearman correlations
-                try:
-                    corr_close_spearman_df = pd.read_parquet('data/corr_close_spearman_30d.parquet')
-                    self.corr_close_spearman = corr_close_spearman_df.set_index('index')
-                    
-                    corr_returns_spearman_df = pd.read_parquet('data/corr_returns_spearman_30d.parquet')
-                    self.corr_returns_spearman = corr_returns_spearman_df.set_index('index')
-                except FileNotFoundError:
-                    print("Spearman correlations not found, calculating...")
-                    self.corr_close_spearman = self.calculate_spearman_correlation(self.closes)
-                    self.corr_returns_spearman = self.calculate_spearman_correlation(self.returns)
-                
-                # Load Kendall correlations
-                try:
-                    corr_close_kendall_df = pd.read_parquet('data/corr_close_kendall_30d.parquet')
-                    self.corr_close_kendall = corr_close_kendall_df.set_index('index')
-                    
-                    corr_returns_kendall_df = pd.read_parquet('data/corr_returns_kendall_30d.parquet')
-                    self.corr_returns_kendall = corr_returns_kendall_df.set_index('index')
-                except FileNotFoundError:
-                    print("Kendall correlations not found, calculating...")
-                    self.corr_close_kendall = self.calculate_kendall_correlation(self.closes)
-                    self.corr_returns_kendall = self.calculate_kendall_correlation(self.returns)
-                
-                print("Data and all correlation types loaded from cache")
+                print("Data and pre-calculated correlations loaded from cache")
             except FileNotFoundError:
                 print("Pre-calculated correlations not found, calculating now...")
                 self.corr_close = self.closes.corr()
                 self.corr_returns = self.returns.corr()
-                self.corr_close_spearman = self.calculate_spearman_correlation(self.closes)
-                self.corr_returns_spearman = self.calculate_spearman_correlation(self.returns)
-                self.corr_close_kendall = self.calculate_kendall_correlation(self.closes)
-                self.corr_returns_kendall = self.calculate_kendall_correlation(self.returns)
-                print("All correlations calculated")
+                print("Correlations calculated")
             
             return True
         except FileNotFoundError:
@@ -299,6 +277,24 @@ app.layout = dbc.Container([
         dbc.Col([
             html.H1("Binance USDC Pairs Correlation Analysis", className="text-center mb-4"),
             
+            # Educational section about Spearman for crypto
+            dbc.Alert([
+                html.H5("⭐ Why Spearman Correlation for Cryptocurrency?", className="alert-heading"),
+                html.P([
+                    "📊 ", html.Strong("Spearman (Rank) Correlation"), " is specifically recommended for crypto analysis because:"
+                ]),
+                html.Ul([
+                    html.Li("🛡️ Resistant to outliers and extreme volatility (common in crypto)"),
+                    html.Li("📈 Detects monotonic relationships (when BTC rises, altcoins tend to rise)"),
+                    html.Li("🎯 Better for non-linear price movements typical in cryptocurrency markets"),
+                    html.Li("📊 Excellent for volume correlation analysis in trading pairs")
+                ]),
+                html.P([
+                    "💡 ", html.Strong("Tip:"), " Use Spearman correlation to identify which coins move together during market trends, "
+                    "regardless of the exact proportional relationship."
+                ], className="mb-0")
+            ], color="info", className="mb-4"),
+            
             dbc.Card([
                 dbc.CardBody([
                     dbc.Row([
@@ -316,20 +312,28 @@ app.layout = dbc.Container([
                         ], width=6),
                         
                         dbc.Col([
-                            html.Label("Correlation Type:"),
-                            dcc.RadioItems(
-                                id='correlation-type',
-                                options=[
-                                    {'label': 'Price Correlation (Pearson)', 'value': 'close'},
-                                    {'label': 'Returns Correlation (Pearson)', 'value': 'returns'},
-                                    {'label': 'Price Correlation (Spearman)', 'value': 'close_spearman'},
-                                    {'label': 'Returns Correlation (Spearman)', 'value': 'returns_spearman'},
-                                    {'label': 'Price Correlation (Kendall)', 'value': 'close_kendall'},
-                                    {'label': 'Returns Correlation (Kendall)', 'value': 'returns_kendall'}
-                                ],
-                                value='returns',
-                                inline=True
-                            )
+                            html.Div([
+                                html.P("📊 Correlation Type:", style={'margin-bottom': '5px', 'font-weight': 'bold'}),
+                                html.P("⭐ Spearman recommended for crypto (handles volatility & outliers)", 
+                                      style={'font-size': '12px', 'color': '#007bff', 'margin-bottom': '10px', 'font-style': 'italic'}),
+                                dcc.RadioItems(
+                                    id='correlation-type',
+                                    options=[
+                                        {'label': '💰 Price Correlation (Pearson)', 'value': 'close'},
+                                        {'label': '📈 Returns Correlation (Pearson)', 'value': 'returns'},
+                                        {'label': '📊 Volume Correlation (Pearson)', 'value': 'volumes'},
+                                        {'label': '⭐ Price Correlation (Spearman - Crypto)', 'value': 'close_spearman'},
+                                        {'label': '⭐ Returns Correlation (Spearman - Crypto)', 'value': 'returns_spearman'},
+                                        {'label': '⭐ Volume Correlation (Spearman - Crypto)', 'value': 'volumes_spearman'},
+                                        {'label': '📊 Price Correlation (Kendall)', 'value': 'close_kendall'},
+                                        {'label': '📊 Returns Correlation (Kendall)', 'value': 'returns_kendall'},
+                                        {'label': '📊 Volume Correlation (Kendall)', 'value': 'volumes_kendall'}
+                                    ],
+                                    value='returns_spearman',
+                                    inline=False,
+                                    style={'font-size': '13px'}
+                                )
+                            ])
                         ], width=6)
                     ]),
                     
@@ -398,25 +402,46 @@ def update_heatmap(selected_symbols, corr_type):
     # Select the appropriate correlation matrix
     if corr_type == 'close':
         corr_matrix = app_instance.corr_close.loc[selected_symbols, selected_symbols]
-        title = "Price Correlation Matrix (Pearson)"
+        title = "💰 Price Correlation Matrix (Pearson)"
     elif corr_type == 'returns':
         corr_matrix = app_instance.corr_returns.loc[selected_symbols, selected_symbols]
-        title = "Returns Correlation Matrix (Pearson)"
+        title = "📈 Returns Correlation Matrix (Pearson)"
+    elif corr_type == 'volumes':
+        if app_instance.corr_volumes is not None:
+            corr_matrix = app_instance.corr_volumes.loc[selected_symbols, selected_symbols]
+            title = "📊 Volume Correlation Matrix (Pearson)"
+        else:
+            corr_matrix = app_instance.corr_returns.loc[selected_symbols, selected_symbols]
+            title = "📈 Returns Correlation Matrix (Pearson) - Volume data not available"
     elif corr_type == 'close_spearman':
         corr_matrix = app_instance.corr_close_spearman.loc[selected_symbols, selected_symbols]
-        title = "Price Correlation Matrix (Spearman)"
+        title = "⭐ Price Correlation Matrix (Spearman - Crypto Optimized)"
     elif corr_type == 'returns_spearman':
         corr_matrix = app_instance.corr_returns_spearman.loc[selected_symbols, selected_symbols]
-        title = "Returns Correlation Matrix (Spearman)"
+        title = "⭐ Returns Correlation Matrix (Spearman - Crypto Optimized)"
+    elif corr_type == 'volumes_spearman':
+        if app_instance.corr_volumes_spearman is not None:
+            corr_matrix = app_instance.corr_volumes_spearman.loc[selected_symbols, selected_symbols]
+            title = "⭐ Volume Correlation Matrix (Spearman - Crypto Optimized)"
+        else:
+            corr_matrix = app_instance.corr_returns_spearman.loc[selected_symbols, selected_symbols]
+            title = "⭐ Returns Correlation Matrix (Spearman) - Volume data not available"
     elif corr_type == 'close_kendall':
         corr_matrix = app_instance.corr_close_kendall.loc[selected_symbols, selected_symbols]
-        title = "Price Correlation Matrix (Kendall)"
+        title = "📊 Price Correlation Matrix (Kendall)"
     elif corr_type == 'returns_kendall':
         corr_matrix = app_instance.corr_returns_kendall.loc[selected_symbols, selected_symbols]
-        title = "Returns Correlation Matrix (Kendall)"
+        title = "📊 Returns Correlation Matrix (Kendall)"
+    elif corr_type == 'volumes_kendall':
+        if app_instance.corr_volumes_kendall is not None:
+            corr_matrix = app_instance.corr_volumes_kendall.loc[selected_symbols, selected_symbols]
+            title = "📊 Volume Correlation Matrix (Kendall)"
+        else:
+            corr_matrix = app_instance.corr_returns_kendall.loc[selected_symbols, selected_symbols]
+            title = "📊 Returns Correlation Matrix (Kendall) - Volume data not available"
     else:
-        corr_matrix = app_instance.corr_returns.loc[selected_symbols, selected_symbols]
-        title = "Returns Correlation Matrix (Pearson)"
+        corr_matrix = app_instance.corr_returns_spearman.loc[selected_symbols, selected_symbols]
+        title = "⭐ Returns Correlation Matrix (Spearman - Default for Crypto)"
     
     fig = px.imshow(
         corr_matrix,
