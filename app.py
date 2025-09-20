@@ -1,6 +1,11 @@
 import asyncio
 import os
+import subprocess
 import pandas as pd
+
+# Suppress git-related stderr to prevent "fatal: bad revision 'HEAD'" messages
+# This commonly happens when libraries try to get version info from git
+os.environ['GIT_DIR'] = '/dev/null'
 import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
