@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 import ccxt.async_support as ccxt
 from dash import Dash, dcc, html, Input, Output, callback, dash_table
 import dash_bootstrap_components as dbc
+from scipy.stats import spearmanr, kendalltau
 
 DAYS = int(os.getenv('DAYS', 30))
 TIMEFRAME = os.getenv('TIMEFRAME', '1d')
@@ -22,6 +23,10 @@ class BinanceCorrelationApp:
         self.meta_df = None
         self.corr_close = None
         self.corr_returns = None
+        self.corr_close_spearman = None
+        self.corr_returns_spearman = None
+        self.corr_close_kendall = None
+        self.corr_returns_kendall = None
         
     async def fetch_symbols(self):
         """Fetch all USDC trading pairs from Binance"""
@@ -131,10 +136,45 @@ class BinanceCorrelationApp:
             self.corr_close = self.closes.corr()
             print("Calculating returns correlations...")
             self.corr_returns = self.returns.corr()
-            print("Correlation calculations completed")
+            
+            print("Calculating Spearman correlations...")
+            self.corr_close_spearman = self.calculate_spearman_correlation(self.closes)
+            self.corr_returns_spearman = self.calculate_spearman_correlation(self.returns)
+            
+            print("Calculating Kendall correlations...")
+            self.corr_close_kendall = self.calculate_kendall_correlation(self.closes)
+            self.corr_returns_kendall = self.calculate_kendall_correlation(self.returns)
+            
+            print("All correlation calculations completed")
             
         finally:
             await exchange.close()
+    
+    def calculate_spearman_correlation(self, data):
+        """Calculate Spearman rank correlation matrix"""
+        corr_matrix = pd.DataFrame(index=data.columns, columns=data.columns)
+        
+        for i, col1 in enumerate(data.columns):
+            for j, col2 in enumerate(data.columns):
+                if i <= j:  # Only calculate upper triangle
+                    corr, _ = spearmanr(data[col1].dropna(), data[col2].dropna())
+                    corr_matrix.loc[col1, col2] = corr
+                    corr_matrix.loc[col2, col1] = corr  # Symmetric matrix
+        
+        return corr_matrix.astype(float)
+    
+    def calculate_kendall_correlation(self, data):
+        """Calculate Kendall tau correlation matrix"""
+        corr_matrix = pd.DataFrame(index=data.columns, columns=data.columns)
+        
+        for i, col1 in enumerate(data.columns):
+            for j, col2 in enumerate(data.columns):
+                if i <= j:  # Only calculate upper triangle
+                    corr, _ = kendalltau(data[col1].dropna(), data[col2].dropna())
+                    corr_matrix.loc[col1, col2] = corr
+                    corr_matrix.loc[col2, col1] = corr  # Symmetric matrix
+        
+        return corr_matrix.astype(float)
     
     def save_cache(self):
         """Save data to Parquet cache files"""
@@ -148,8 +188,16 @@ class BinanceCorrelationApp:
             self.corr_close.reset_index().to_parquet('data/corr_close_30d.parquet', index=False)
         if self.corr_returns is not None:
             self.corr_returns.reset_index().to_parquet('data/corr_returns_30d.parquet', index=False)
+        if self.corr_close_spearman is not None:
+            self.corr_close_spearman.reset_index().to_parquet('data/corr_close_spearman_30d.parquet', index=False)
+        if self.corr_returns_spearman is not None:
+            self.corr_returns_spearman.reset_index().to_parquet('data/corr_returns_spearman_30d.parquet', index=False)
+        if self.corr_close_kendall is not None:
+            self.corr_close_kendall.reset_index().to_parquet('data/corr_close_kendall_30d.parquet', index=False)
+        if self.corr_returns_kendall is not None:
+            self.corr_returns_kendall.reset_index().to_parquet('data/corr_returns_kendall_30d.parquet', index=False)
         
-        print("Data and correlations cached to Parquet files")
+        print("Data and all correlation types cached to Parquet files")
     
     def load_cache(self):
         """Load data from Parquet cache files"""
@@ -171,12 +219,40 @@ class BinanceCorrelationApp:
                 corr_returns_df = pd.read_parquet('data/corr_returns_30d.parquet')
                 self.corr_returns = corr_returns_df.set_index('index')
                 
-                print("Data and pre-calculated correlations loaded from cache")
+                # Load Spearman correlations
+                try:
+                    corr_close_spearman_df = pd.read_parquet('data/corr_close_spearman_30d.parquet')
+                    self.corr_close_spearman = corr_close_spearman_df.set_index('index')
+                    
+                    corr_returns_spearman_df = pd.read_parquet('data/corr_returns_spearman_30d.parquet')
+                    self.corr_returns_spearman = corr_returns_spearman_df.set_index('index')
+                except FileNotFoundError:
+                    print("Spearman correlations not found, calculating...")
+                    self.corr_close_spearman = self.calculate_spearman_correlation(self.closes)
+                    self.corr_returns_spearman = self.calculate_spearman_correlation(self.returns)
+                
+                # Load Kendall correlations
+                try:
+                    corr_close_kendall_df = pd.read_parquet('data/corr_close_kendall_30d.parquet')
+                    self.corr_close_kendall = corr_close_kendall_df.set_index('index')
+                    
+                    corr_returns_kendall_df = pd.read_parquet('data/corr_returns_kendall_30d.parquet')
+                    self.corr_returns_kendall = corr_returns_kendall_df.set_index('index')
+                except FileNotFoundError:
+                    print("Kendall correlations not found, calculating...")
+                    self.corr_close_kendall = self.calculate_kendall_correlation(self.closes)
+                    self.corr_returns_kendall = self.calculate_kendall_correlation(self.returns)
+                
+                print("Data and all correlation types loaded from cache")
             except FileNotFoundError:
                 print("Pre-calculated correlations not found, calculating now...")
                 self.corr_close = self.closes.corr()
                 self.corr_returns = self.returns.corr()
-                print("Correlations calculated")
+                self.corr_close_spearman = self.calculate_spearman_correlation(self.closes)
+                self.corr_returns_spearman = self.calculate_spearman_correlation(self.returns)
+                self.corr_close_kendall = self.calculate_kendall_correlation(self.closes)
+                self.corr_returns_kendall = self.calculate_kendall_correlation(self.returns)
+                print("All correlations calculated")
             
             return True
         except FileNotFoundError:
@@ -244,8 +320,12 @@ app.layout = dbc.Container([
                             dcc.RadioItems(
                                 id='correlation-type',
                                 options=[
-                                    {'label': 'Price Correlation', 'value': 'close'},
-                                    {'label': 'Returns Correlation', 'value': 'returns'}
+                                    {'label': 'Price Correlation (Pearson)', 'value': 'close'},
+                                    {'label': 'Returns Correlation (Pearson)', 'value': 'returns'},
+                                    {'label': 'Price Correlation (Spearman)', 'value': 'close_spearman'},
+                                    {'label': 'Returns Correlation (Spearman)', 'value': 'returns_spearman'},
+                                    {'label': 'Price Correlation (Kendall)', 'value': 'close_kendall'},
+                                    {'label': 'Returns Correlation (Kendall)', 'value': 'returns_kendall'}
                                 ],
                                 value='returns',
                                 inline=True
@@ -315,12 +395,28 @@ def update_heatmap(selected_symbols, corr_type):
     if not selected_symbols or app_instance.corr_close is None:
         return go.Figure()
     
+    # Select the appropriate correlation matrix
     if corr_type == 'close':
         corr_matrix = app_instance.corr_close.loc[selected_symbols, selected_symbols]
-        title = "Price Correlation Matrix"
+        title = "Price Correlation Matrix (Pearson)"
+    elif corr_type == 'returns':
+        corr_matrix = app_instance.corr_returns.loc[selected_symbols, selected_symbols]
+        title = "Returns Correlation Matrix (Pearson)"
+    elif corr_type == 'close_spearman':
+        corr_matrix = app_instance.corr_close_spearman.loc[selected_symbols, selected_symbols]
+        title = "Price Correlation Matrix (Spearman)"
+    elif corr_type == 'returns_spearman':
+        corr_matrix = app_instance.corr_returns_spearman.loc[selected_symbols, selected_symbols]
+        title = "Returns Correlation Matrix (Spearman)"
+    elif corr_type == 'close_kendall':
+        corr_matrix = app_instance.corr_close_kendall.loc[selected_symbols, selected_symbols]
+        title = "Price Correlation Matrix (Kendall)"
+    elif corr_type == 'returns_kendall':
+        corr_matrix = app_instance.corr_returns_kendall.loc[selected_symbols, selected_symbols]
+        title = "Returns Correlation Matrix (Kendall)"
     else:
         corr_matrix = app_instance.corr_returns.loc[selected_symbols, selected_symbols]
-        title = "Returns Correlation Matrix"
+        title = "Returns Correlation Matrix (Pearson)"
     
     fig = px.imshow(
         corr_matrix,
