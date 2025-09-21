@@ -292,12 +292,48 @@ class BinanceCorrelationApp:
 
 app_instance = BinanceCorrelationApp()
 
-app = Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
+app = Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP], meta_tags=[
+    {"name": "viewport", "content": "width=device-width, initial-scale=1"}
+])
 
 app.layout = dbc.Container([
+    html.Style("""
+        @media (max-width: 576px) {
+            .card { margin-bottom: 1rem !important; }
+            .btn { font-size: 0.875rem; }
+            .form-label { font-size: 0.875rem; }
+        }
+        @media (max-width: 768px) {
+            .container-fluid { padding: 0.5rem; }
+            .row { margin: 0; }
+            .col { padding: 0.25rem; }
+        }
+        .heatmap-container {
+            width: 100%;
+            overflow-x: auto;
+            overflow-y: auto;
+            max-height: 80vh;
+        }
+        .correlation-matrix {
+            min-width: 600px;
+            width: 100%;
+            height: auto;
+        }
+        @media (max-width: 768px) {
+            .heatmap-container {
+                max-height: 60vh;
+            }
+            .correlation-matrix {
+                min-width: 400px;
+            }
+        }
+    """),
+    
     dbc.Row([
         dbc.Col([
-            html.H1("Binance USDC Pairs Correlation Analysis", className="text-center mb-4"),
+            html.H1("Binance USDC Pairs Correlation Analysis", 
+                   className="text-center mb-4", 
+                   style={'fontSize': 'clamp(1.5rem, 4vw, 2.5rem)'}),
             
             dbc.Card([
                 dbc.CardBody([
@@ -313,7 +349,7 @@ app.layout = dbc.Container([
                                 marks={i: f'{i/1000:.0f}K' for i in range(0, 1000001, 200000)},
                                 tooltip={"placement": "bottom", "always_visible": True}
                             )
-                        ], width=6),
+                        ], width=12, lg=6),
                         
                         dbc.Col([
                             html.Label("Correlation Type:"),
@@ -328,9 +364,9 @@ app.layout = dbc.Container([
                                     {'label': 'Returns Correlation (Kendall)', 'value': 'returns_kendall'}
                                 ],
                                 value='returns',
-                                inline=True
+                                style={'fontSize': 'clamp(0.8rem, 2vw, 1rem)'}
                             )
-                        ], width=6)
+                        ], width=12, lg=6)
                     ]),
                     
                     html.Hr(),
@@ -352,15 +388,17 @@ app.layout = dbc.Container([
                 dbc.CardBody([
                     dbc.Row([
                         dbc.Col([
-                            dbc.Button("Export CSV", id="btn-csv", color="primary", className="me-2"),
-                            dbc.Button("Export Parquet", id="btn-parquet", color="secondary", className="me-2"),
-                            dbc.Button("Refresh Data", id="btn-refresh", color="warning")
+                            dbc.Button("Export CSV", id="btn-csv", color="primary", className="me-2 mb-2"),
+                            dbc.Button("Export Parquet", id="btn-parquet", color="secondary", className="me-2 mb-2"),
+                            dbc.Button("Refresh Data", id="btn-refresh", color="warning", className="mb-2")
                         ])
                     ])
                 ])
             ], className="mb-4"),
             
-            dcc.Graph(id='correlation-heatmap'),
+            html.Div([
+                dcc.Graph(id='correlation-heatmap', className='correlation-matrix')
+            ], className='heatmap-container'),
             
             html.Div(id='stats-table')
             
@@ -427,10 +465,39 @@ def update_heatmap(selected_symbols, corr_type):
         title=title
     )
     
+    # Calculate responsive dimensions
+    num_symbols = len(selected_symbols)
+    base_size = 40  # Base cell size
+    min_size = 25   # Minimum cell size
+    max_size = 60   # Maximum cell size
+    
+    # Adjust cell size based on number of symbols
+    cell_size = max(min_size, min(max_size, base_size - (num_symbols - 10) * 2))
+    height = max(400, min(800, num_symbols * cell_size + 100))
+    
+    # Font size calculation
+    font_size = max(8, min(14, 120 / num_symbols))
+    
     fig.update_layout(
-        height=600,
+        height=height,
         xaxis_title="Symbol",
-        yaxis_title="Symbol"
+        yaxis_title="Symbol",
+        font=dict(size=font_size),
+        margin=dict(l=20, r=20, t=60, b=20),
+        xaxis=dict(
+            tickangle=45,
+            tickfont=dict(size=font_size)
+        ),
+        yaxis=dict(
+            tickfont=dict(size=font_size)
+        )
+    )
+    
+    # Update hovertemplate for better mobile experience
+    fig.update_traces(
+        hovertemplate="<b>%{x}</b> vs <b>%{y}</b><br>" +
+                      "Correlation: %{z:.3f}<br>" +
+                      "<extra></extra>"
     )
     
     return fig
@@ -455,7 +522,7 @@ def update_stats_table(selected_symbols):
             {'name': 'Mean Price (30d)', 'id': 'mean_price_30d', 'type': 'numeric', 'format': {'specifier': '.4f'}}
         ],
         style_table={'overflowX': 'auto'},
-        style_cell={'textAlign': 'left'},
+        style_cell={'textAlign': 'left', 'fontSize': 'clamp(0.7rem, 2vw, 0.9rem)'},
         style_header={'backgroundColor': 'rgb(230, 230, 230)', 'fontWeight': 'bold'},
         sort_action='native'
     )
