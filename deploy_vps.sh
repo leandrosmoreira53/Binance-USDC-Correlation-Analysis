@@ -72,3 +72,4 @@ echo "   - 500 symbols analyzed (vs 120 local)"
 echo "   - 90 days of data (vs 30 local)"
 echo "   - Auto-restart on failure"
 echo "   - System monitoring tools installed"
+
