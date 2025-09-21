@@ -296,40 +296,60 @@ app = Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP], meta_tags=[
     {"name": "viewport", "content": "width=device-width, initial-scale=1"}
 ])
 
-app.layout = dbc.Container([
-    html.Style("""
-        @media (max-width: 576px) {
-            .card { margin-bottom: 1rem !important; }
-            .btn { font-size: 0.875rem; }
-            .form-label { font-size: 0.875rem; }
-        }
-        @media (max-width: 768px) {
-            .container-fluid { padding: 0.5rem; }
-            .row { margin: 0; }
-            .col { padding: 0.25rem; }
-        }
-        .heatmap-container {
-            width: 100%;
-            overflow-x: auto;
-            overflow-y: auto;
-            max-height: 80vh;
-        }
-        .correlation-matrix {
-            min-width: 600px;
-            width: 100%;
-            height: auto;
-        }
-        @media (max-width: 768px) {
+# Custom CSS for responsive design
+app.index_string = '''
+<!DOCTYPE html>
+<html>
+    <head>
+        {%metas%}
+        <title>{%title%}</title>
+        {%favicon%}
+        {%css%}
+        <style>
+            @media (max-width: 576px) {
+                .card { margin-bottom: 1rem !important; }
+                .btn { font-size: 0.875rem; }
+                .form-label { font-size: 0.875rem; }
+            }
+            @media (max-width: 768px) {
+                .container-fluid { padding: 0.5rem; }
+                .row { margin: 0; }
+                .col { padding: 0.25rem; }
+            }
             .heatmap-container {
-                max-height: 60vh;
+                width: 100%;
+                overflow-x: auto;
+                overflow-y: auto;
+                max-height: 80vh;
             }
             .correlation-matrix {
-                min-width: 400px;
+                min-width: 600px;
+                width: 100%;
+                height: auto;
             }
-        }
-    """),
-    
-    dbc.Row([
+            @media (max-width: 768px) {
+                .heatmap-container {
+                    max-height: 60vh;
+                }
+                .correlation-matrix {
+                    min-width: 400px;
+                }
+            }
+        </style>
+    </head>
+    <body>
+        {%app_entry%}
+        <footer>
+            {%config%}
+            {%scripts%}
+            {%renderer%}
+        </footer>
+    </body>
+</html>
+'''
+
+app.layout = dbc.Container([
+        dbc.Row([
         dbc.Col([
             html.H1("Binance USDC Pairs Correlation Analysis", 
                    className="text-center mb-4", 
@@ -462,7 +482,9 @@ def update_heatmap(selected_symbols, corr_type):
         y=corr_matrix.index,
         color_continuous_scale='RdBu_r',
         aspect='auto',
-        title=title
+        title=title,
+        zmin=-1,
+        zmax=1
     )
     
     # Calculate responsive dimensions
@@ -490,6 +512,12 @@ def update_heatmap(selected_symbols, corr_type):
         ),
         yaxis=dict(
             tickfont=dict(size=font_size)
+        ),
+        coloraxis_colorbar=dict(
+            title="Correlation",
+            dtick=0.2,
+            tickvals=[-1, -0.8, -0.6, -0.4, -0.2, 0, 0.2, 0.4, 0.6, 0.8, 1],
+            ticktext=["-1.0", "-0.8", "-0.6", "-0.4", "-0.2", "0.0", "0.2", "0.4", "0.6", "0.8", "1.0"]
         )
     )
     
